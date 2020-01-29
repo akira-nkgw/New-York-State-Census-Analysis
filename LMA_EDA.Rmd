@@ -1,0 +1,310 @@
+---
+title: "R Notebook"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+
+
+```{r warning = FALSE, message = FALSE}
+rm(list=ls())
+# Clear environmet of packages
+if(is.null(sessionInfo()$otherPkgs) == FALSE)lapply(paste("package:", names(sessionInfo()$otherPkgs), sep=""), detach, character.only = TRUE, unload = TRUE)
+
+library(tidyverse)
+library(readr)
+library(gridExtra)
+library(GGally)
+library(htmlTable)
+library(stringr)
+
+
+psam_p36 <- read_csv("psam_p36.csv")
+
+```
+# 1. examine the first 10 or 20 observations (rows of data) corresponding to variables of interest (columns) and compare the observed values to the data dictionary (Links to an external site.) for person records
+```{r}
+head(psam_p36, 10)
+```
+
+Comment: 
+- Some data has NA value, but most data is align with the data dictionary
+
+
+# 2. compute and examine descriptive statistics for the full sample for your state including the minimum, maximum, mean, and median for quantitative variables of interest
+
+```{r}
+psam_p36$ADJINC <- psam_p36$ADJINC/ 1000000
+summary(psam_p36$ADJINC)
+class(psam_p36$ADJINC)
+```
+
+
+2.1. descriptive statistics for the full sample of qunatitative variables
+```{r}
+# convert into qunatitative variable
+psam_p36$PERNP <- as.numeric(psam_p36$PERNP)* psam_p36$ADJINC # PERNP: Total person's earnings
+psam_p36$AGEP <- as.numeric(psam_p36$AGEP) # person's age
+psam_p36$PWGTP <- as.numeric(psam_p36$PWGTP) # person's weight
+psam_p36$JWMNP <- as.numeric(psam_p36$JWMNP) # person's travel time
+
+sample_full <- data.frame(PERNP = psam_p36$PERNP, AGEP = psam_p36$AGEP, PWGTP = psam_p36$PWGTP, JWMNP = psam_p36$JWMNP )
+# descriptive statistics before cleaning/sample selection
+summary(sample_full)
+
+```
+
+Comment: 
+- too many NA's, delete those row in PERNP. 
+- Mean is high but the median value is 1/3 of mean
+- Because 1st Qu. is 0 dollars, there might be people who does not work at all (they might live on devidend or pension, etc)
+
+2.2. Sample selection 1
+```{r}
+psam_p36 <- subset(psam_p36, !is.na(psam_p36$PERNP)) # get rid of N/A: No information about one's earnings
+psam_p36 <- subset(psam_p36, !is.na(psam_p36$MIL)) # get rid of N/A for non-eligible samples to join military (less than 17 years old) 
+psam_p36$MIL <- factor(psam_p36$MIL)
+
+
+levels(psam_p36$MIL)[levels(psam_p36$MIL)=="1"] <- "Now active duty"
+levels(psam_p36$MIL)[levels(psam_p36$MIL)=="2"] <- "Active duty in the past"
+levels(psam_p36$MIL)[levels(psam_p36$MIL)=="3"] <- "Active duty in the past"
+levels(psam_p36$MIL)[levels(psam_p36$MIL)=="4"] <- "Never served"
+
+psam_p36 <- subset(psam_p36, psam_p36$MIL != "Now active duty") # get rid of who are currently in the military
+psam_p36 <- subset(psam_p36, !factor(psam_p36$ESR) == "6" ) # get rid of samples not in labor force
+psam_p36 <- subset(psam_p36, !factor(psam_p36$CIT) == "5" ) # Not a citizen of the U.S.
+psam_p36 <- subset(psam_p36, as.numeric(psam_p36$AGEP) < 65 ) # less than 65 years old
+psam_p36 <- subset(psam_p36, factor(psam_p36$ESR) != 6 ) # Exclude "Not in labor force"
+# psam_p36 <- subset(psam_p36, factor(psam_p36$ESR) != 1 ) # Exclude "Not in labor force"
+psam_p36 <- subset(psam_p36, as.numeric(psam_p36$PERNP) > 0 ) # exclude obs with less than $0 earnings
+
+
+str(psam_p36$MIL)
+
+
+sample_selection_1 <- data.frame(PERNP = psam_p36$PERNP, AGEP = psam_p36$AGEP, PWGTP = psam_p36$PWGTP, JWMNP = psam_p36$JWMNP ,MIL = psam_p36$MIL, SOCP = factor(psam_p36$SOCP), NWLK = factor(psam_p36$NWLK))
+# descriptive statistics
+summary((sample_selection_1))
+```
+
+Comment: 
+- the data is cleaner
+- the median and mean for earnings(PERNP) are still far from each other
+
+<hr>
+# 3. generate and examine histograms for quantitative variables of interest
+```{r message = FALSE, warning = FALSE}
+# earning in 1000 in New York State
+grid.arrange(
+ggplot(data = psam_p36, mapping = aes(x = PERNP/1000)) + 
+    theme_classic() +
+    geom_histogram(),
+
+ggplot(data = psam_p36, mapping = aes(x = AGEP)) + 
+    theme_classic() +
+    geom_histogram(),
+
+ggplot(data = psam_p36, mapping = aes(x = PWGTP)) + 
+    theme_classic() +
+    geom_histogram(),
+
+ggplot(data = psam_p36, mapping = aes(x = JWMNP)) + 
+    theme_classic() +
+    geom_histogram(),
+ncol = 2 )
+```
+
+- Most of the samples has earning around 0 to 300,000 
+<hr>
+# 4. generate and examine bar charts/graphs for qualitative variables of interest
+```{r}
+# mean earnings by Military Service
+psam_p36 %>%
+  group_by(MIL) %>%
+  summarise(mean_earning = mean(PERNP)) %>%
+  ggplot(aes(x = MIL , y = mean_earning)) +
+  theme_classic() +
+  geom_bar(stat = "identity", position = "dodge") 
+```
+
+- Samples with active duty experience have greater mean earnings.
+
+
+```{r}
+psam_p36 %>%
+  group_by(MIL) %>%
+  summarise(median_earning = median(PERNP)) %>%
+  ggplot(aes(x = MIL , y = median_earning)) +
+  theme_classic() +
+  geom_bar(stat = "identity", position = "dodge") 
+```
+
+- Median is also the same
+
+```{r}
+# Clean the data(Race and ethnicity)
+psam_p36$RAC1P <- factor(psam_p36$RAC1P)
+levels(psam_p36$RAC1P)[levels(psam_p36$RAC1P)=="1"] <- "White"
+levels(psam_p36$RAC1P)[levels(psam_p36$RAC1P)=="2"] <- "African American"
+levels(psam_p36$RAC1P)[levels(psam_p36$RAC1P)=="3"] <- "American Indian"
+levels(psam_p36$RAC1P)[levels(psam_p36$RAC1P)=="4"] <- "Alaska Native"
+levels(psam_p36$RAC1P)[levels(psam_p36$RAC1P)=="5"] <- "Other Native"
+levels(psam_p36$RAC1P)[levels(psam_p36$RAC1P)=="6"] <- "Asian"
+levels(psam_p36$RAC1P)[levels(psam_p36$RAC1P)=="7"] <- "Native Hawaiian"
+levels(psam_p36$RAC1P)[levels(psam_p36$RAC1P)=="8"] <- "Some other race"
+levels(psam_p36$RAC1P)[levels(psam_p36$RAC1P)=="9"] <- "Two or More Races"
+
+# levels(psam_p36$RAC1P)
+# summary(psam_p36$RAC1P)
+```
+
+
+```{r}
+psam_p36 %>%
+    group_by(MIL, RAC1P) %>%
+    summarise(mean_earning = mean(PERNP)) %>%
+    ggplot(mapping = aes(x = reorder(RAC1P, mean_earning) , y = mean_earning, fill = as.factor(MIL))) + 
+    geom_bar(stat = "identity", position = "dodge") + 
+    theme_classic() + 
+    coord_flip() 
+```
+
+- we have limitation on examine some of the races due to the lack of data
+
+```{r}
+# Sample selection 2: get rid of variables with insufficint data for races and military service
+psam_p36 <- subset(psam_p36, psam_p36$RAC1P != "Alaska Native") 
+psam_p36 <- subset(psam_p36, psam_p36$RAC1P != "Some other race") # 
+psam_p36 <- subset(psam_p36, psam_p36$RAC1P != "Other Native") # 
+psam_p36 <- subset(psam_p36, psam_p36$RAC1P != "Native Hawaiian") # 
+psam_p36 <- subset(psam_p36, psam_p36$RAC1P != "Two or More Races") # 
+```
+
+
+```{r warning = FALSE, message = FALSE}
+psam_p36 %>%
+    group_by(MIL, RAC1P) %>%
+    summarise(mean_earning = mean(PERNP)) %>%
+    ggplot(mapping = aes(x = reorder(RAC1P, -mean_earning) , y = mean_earning, fill = as.factor(MIL))) + 
+    geom_bar(stat = "identity", position = "dodge") +
+    theme_classic() +
+    theme(legend.position = "top") +
+    coord_flip() 
+```
+  
+- Samples with Military training have higher mean earnings for all races
+- Asian and White have smaller mean earning if they have active duty in the past than the ones never served
+
+
+# 5. generate and examine cross tabulations, scatterplots, and/or correlation coefficients of interest
+
+```{r warning = FALSE, message = FALSE}
+
+#Correlation
+psam_p36 %>%
+  select(MIL, RAC1P, PERNP, AGEP, PWGTP, JWMNP) %>%
+  ggpairs()
+```
+
+- All quantitative variables do not have strong correlation witth one's earnings
+- Commute time to work (JWMNP) might be a better one
+
+# rationale for sample selection criteria
+ - get rid of N/A: No information about one's earnings
+ - get rid of N/A for non-eligible samples to join military (less than 17 years old) 
+ - get rid of samples not looking for work because we use earnings instead of income
+ - get rid of races which has small observations to conduct EDA for earnings and military
+
+# descriptive statistics (after imposing sample selection criteria)
+
+```{r}
+sample <- data.frame(RAC1P = psam_p36$RAC1P, MIL = psam_p36$MIL, PERNP = psam_p36$PERNP, AGEP = psam_p36$AGEP, PWGTP = psam_p36$PWGTP, JWMNP = psam_p36$JWMNP)
+summary(sample)
+```
+
+
+# Regression 
+```{r}
+psam_p36 <- mutate(psam_p36,SOCP_group = case_when(str_detect(SOCP, "^11") ~ "Management",
+                          str_detect(SOCP, "^13") ~ "Biz & Finance",
+                          str_detect(SOCP, "^15") ~ "CS & Math",
+                          str_detect(SOCP, "^17") ~ "Architect & Engineer",
+                          str_detect(SOCP, "^19") ~ "Science",
+                          str_detect(SOCP, "^23") ~ "Legal",
+                          str_detect(SOCP, "^25") ~ "Education",
+                          str_detect(SOCP, "^27") ~ "Entertainment",
+                          str_detect(SOCP, "^29") ~ "Health",
+                          str_detect(SOCP, "^31") ~ "Health support",
+                          str_detect(SOCP, "^33") ~ "Protective",
+                          str_detect(SOCP, "^35") ~ "Food",
+                          str_detect(SOCP, "^37") ~ "Cleaning",
+                          str_detect(SOCP, "^39") ~ "Personal care",
+                          str_detect(SOCP, "^41") ~ "Sales",
+                          str_detect(SOCP, "^43") ~ "Office Admin",
+                          str_detect(SOCP, "^45") ~ "Farming",
+                          str_detect(SOCP, "^47") ~ "Construction",
+                          str_detect(SOCP, "^49") ~ "Mechanics",
+                          str_detect(SOCP, "^51") ~ "Production",
+                          str_detect(SOCP, "^53") ~ "Transportation",
+                          str_detect(SOCP, "^55") ~ "Military"))
+
+```
+
+```{r}
+psam_p36$SOCP_group <- factor(psam_p36$SOCP_group)
+summary(psam_p36$SOCP_group)
+```
+
+## simple regression -  MIL
+```{r}
+singleRegression <- lm(PERNP ~ MIL, data = psam_p36)
+# print(singleRegression)
+summary(singleRegression)
+
+```
+  - a person never served military has lower earnings by -3254 on average relative to a person who have served military before
+
+## Multiple regression - RAC1P (race/ethnicity) added
+```{r}
+
+ml_regression2 <- lm(PERNP ~ MIL + RAC1P, data = psam_p36)
+# print(ml_regression1) 
+summary(ml_regression2)
+```
+  - a person never served military has lower earnings by -3200 on average relative to a person who have served military before
+  - a white person has higher earnings by -20274.6 to African American and -23022.3 to American Indian on average. But to Asian, a white person has lower 
+
+
+# Multiple regression 2 - added all other possible variables
+```{r}
+psam_p36$SOCP <- factor(psam_p36$SOCP)
+psam_p36$SEX <- factor(psam_p36$SEX)
+
+ml_regression2 <- lm(PERNP ~ MIL + RAC1P + AGEP + SEX  + PWGTP + JWMNP + SOCP_group, data = psam_p36)
+# print(ml_regression1) 
+summary(ml_regression2)
+# str(ml_regression2) 
+# compare to Served military, White(RAC1P) and SOCP_group(Architect & Engineer)
+```
+  - R squared improved
+  - On this regression model, people never served military has higher earnings by 8275.811 on average, relative to people served military before
+  - Type of work seems to dominate the earnings
+
+```{r}
+ml_regression3 <- lm(PERNP ~ MIL + RAC1P + AGEP + SEX  + PWGTP + SOCP_group, data = psam_p36) # without JWMNP
+# print(ml_regression1) 
+summary(ml_regression3)
+```
+
+
+
+```{r}
+summary(psam_p36$RAC1P)
+```
+
+
+
