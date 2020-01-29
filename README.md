@@ -1,1 +1,1 @@
-# New-York-State-Sensus-Analysis
+# New-York-State-Census-Analysis
