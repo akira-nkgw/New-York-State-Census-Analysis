@@ -1,5 +1,5 @@
 # New-York-State-Census-Analysis (On-going)
-
+Data is at https://factfinder.census.gov/faces/nav/jsf/pages/index.xhtml
 
 ### Research Questions
 1. Will serving in the military raise the amount of earnings?
